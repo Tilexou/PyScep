@@ -177,7 +177,7 @@ class SigningRequest:
         return SigningRequest(request=request), private_key
 
     @classmethod
-    def generate_csr_adv(cls, subject, key_usage, password=None, private_key=None):
+    def generate_csr_adv(cls, subject, key_usage, password=None, private_key=None, san_domains=None, san_ips=None):
         if private_key is None:
             private_key = cls.generate_pair()
 
@@ -188,6 +188,10 @@ class SigningRequest:
         builder.key_usage = key_usage #[u'digital_signature', u'key_encipherment']
         if password:
             builder.password = six.text_type(password)
+        if san_domains:
+            builder.subject_alt_domains = san_domains
+        if san_ips:
+            builder.subject_alt_ips = san_ips
 
         request = builder.build(private_key.to_asn1_private_key())
 
