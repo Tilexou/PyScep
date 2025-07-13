@@ -176,6 +176,23 @@ class SigningRequest:
 
         return SigningRequest(request=request), private_key
 
+    @classmethod
+    def generate_csr_adv(cls, subject, key_usage, password=None, private_key=None):
+        if private_key is None:
+            private_key = cls.generate_pair()
+
+        builder = ScepCSRBuilder(
+            subject,
+            private_key.public_key.to_asn1_public_key()
+        )
+        builder.key_usage = key_usage #[u'digital_signature', u'key_encipherment']
+        if password:
+            builder.password = six.text_type(password)
+
+        request = builder.build(private_key.to_asn1_private_key())
+
+        return SigningRequest(request=request), private_key
+
     # @classmethod
     # def generate_csr(cls, cn, key_usage, password=None, private_key=None):
     #     """Generate a Certificate Signing Request using a few defaults.
