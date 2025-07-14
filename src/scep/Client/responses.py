@@ -10,6 +10,13 @@ class Capabilities:
     def contains(self, capability):
         return self.caps.__contains__(capability)
 
+    def supports(self, capability: str) -> bool:
+        for cap in self.caps:
+            if capability.lower() == cap.value.lower():
+                return True
+        
+        return False
+
     def is_post_supported(self):
         return self.contains(CACaps.POSTPKIOperation)
 
