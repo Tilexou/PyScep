@@ -80,6 +80,36 @@ class Client:
 
         return response
 
+    def get_ca_certs_enh(self, identifier=None, content=None, type=None):
+        """Query the SCEP Service for the CA Certificate."""
+        message = ''
+        if identifier is not None:
+            message = identifier
+
+        if not content or not type:
+            res = requests.get(self.url, params={'operation': 'GetCACert', 'message': message})
+            res.raise_for_status()
+            if res.status_code != 200:
+                raise ValueError('Got invalid status code for GetCACert: {}'.format(res.status_code))
+            content = res.content
+            type = res.headers['content-type']
+        
+        if type == 'application/x-x509-ca-cert':  # we dont support RA cert yet
+            logger.debug('Received response with CA certificates')
+            response = CACertificates(certificates=[Certificate.from_der(content)])
+            assert len(response.certificates) > 0
+        elif type == 'application/x-x509-ca-ra-cert':  # intermediate via chain
+            logger.debug('Received response with RA certificates')
+            msg = SCEPMessage.parse(content)
+            response = CACertificates(certificates=msg.certificates)
+            assert len(response.certificates) > 1
+        else:
+            raise ValueError('unknown content-type ' + res.headers['content-type'])
+
+        response.verify()
+
+        return response, content, type
+
     def rollover_certificate(self, identifier=None):
         """Query the SCEP Service for rollover certificate"""
         message = ''
