@@ -39,6 +39,22 @@ class Client:
         logger.debug('Server Capabilities are ' + ', '.join(cacaps_str))
         return Capabilities(cacaps)
 
+    def get_ca_capabilities_enh(self, identifier=None):
+        """Query the SCEP Service for its capabilities."""
+        message = ''
+        if identifier is not None:
+            message = identifier
+
+        res = requests.get(self.url, params={'operation': 'GetCACaps', 'message': message})
+        res.raise_for_status()
+        if res.status_code != 200:
+            raise ValueError('Got invalid status code for GetCACaps: {}'.format(res.status_code))
+        caps = [cap.strip().lower() for cap in res.text.splitlines() if cap.strip()]
+        cacaps = {self.reverse_cacaps[cap] for cap in caps if cap in self.reverse_cacaps}
+        cacaps_str = [cap.value for cap in cacaps]
+        logger.debug('Server Capabilities are ' + ', '.join(cacaps_str))
+        return Capabilities(cacaps)
+
     def get_ca_certs(self, identifier=None):
         """Query the SCEP Service for the CA Certificate."""
         message = ''
