@@ -63,9 +63,17 @@ class CACertificates:
     def __init__(self, certificates):
         self._certificates = certificates
 
+        # Usually a RA certificate with Key Encipherment, used to encrypt data (CSR/Request)
         self._recipient = self.__recipient()
+
+        # Usually a RA certificate with Digital Signature, used to verify the server response
         self._signer = self.__signer()
+
+        # Usually an Intermediate CA certificate, issued the recipient and signer certificates and will issue the client/device one (Request)
         self._issuer = self.__issuer()
+
+        # Includes all the CAs (from the issuer/Intermediate if any, up to the Root if provided)
+        self._chain = self.__chain()
 
     @property
     def certificates(self):
@@ -151,6 +159,22 @@ class CACertificates:
         ca = self._filter(required_key_usage=set(), not_required_key_usage=set(), ca_only=True)
         if len(ca) > 0:
             return ca[0]
+
+        return None
+
+    @property
+    def chain(self):
+        return self._chain
+
+    def __chain(self):
+        ca = self._filter(required_key_usage=set(), not_required_key_usage=set(), ca_only=True)
+        expected = self.recipient.issuer
+        for cert in ca:
+            if cert.subject == expected:
+                return cert
+
+        if ca[0] == self.recipient:
+            return cert
 
         return None
 
