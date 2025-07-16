@@ -14,7 +14,7 @@ class Capabilities:
         for cap in self.caps:
             if capability.lower() == cap.value.lower():
                 return True
-        
+
         return False
 
     def is_post_supported(self):
@@ -63,16 +63,23 @@ class CACertificates:
     def __init__(self, certificates):
         self._certificates = certificates
 
-        # Usually a RA certificate with Key Encipherment, used to encrypt data (CSR/Request)
+        # recipient
+        #   RA Certificate with Key Encipherment (RA Encryption Certificate)
+        #   Used to encrypt the SCEP message content (PKCS#7 SignedData, which contains the PKCS#10 CSR and the challenge password)
+        #   Dedicated certificate in Microsoft NDES implementation, can be the CA itself in others
+        # signer
+        #   RA Certificate with Digital Signature (RA Signing Certificate)
+        #   Used to verify the SCEP server's response (PKCS#7 SignedData) (issued certificate, pending response, etc.)
+        #   Dedicated certificate in Microsoft NDES implementation, can be the CA itself in others
+        # issuer
+        #   CA certificate (Intermediate if provided, Root otherwise) with Certificate Sign and/or CRL Sign
+        #   Used to verify the RA certificates and any issued certificate
+        # chain
+        #   CA certificate(s) (Intermediate(s) if provided and Root) with Certificate Sign and/or CRL Sign
+        #   Contains the issuer
         self._recipient = self.__recipient()
-
-        # Usually a RA certificate with Digital Signature, used to verify the server response
         self._signer = self.__signer()
-
-        # Usually an Intermediate CA certificate, issued the recipient and signer certificates and will issue the client/device one (Request)
         self._issuer = self.__issuer()
-
-        # Includes all the CAs (from the issuer/Intermediate if any, up to the Root if provided)
         self._chain = self.__chain()
 
     @property
@@ -167,16 +174,9 @@ class CACertificates:
         return self._chain
 
     def __chain(self):
-        ca = self._filter(required_key_usage=set(), not_required_key_usage=set(), ca_only=True)
-        expected = self.recipient.issuer
-        for cert in ca:
-            if cert.subject == expected:
-                return cert
+        cas = self._filter(required_key_usage=set(), not_required_key_usage=set(), ca_only=True)
 
-        if ca[0] == self.recipient:
-            return cert
-
-        return None
+        return CACertificates.sort_cas(cas)
 
     def _filter(self, required_key_usage, not_required_key_usage, ca_only=False):
         matching_certificates = list()
@@ -193,6 +193,105 @@ class CACertificates:
 
             matching_certificates.append(cert)
         return matching_certificates
+
+    @staticmethod
+    def sort_cas(unsorted_cas):
+        """
+        Sorts a list of CA certificates from the lowest Intermediate CA to the Highest one (Intermediate or Root).
+        Expects a "perect" contiguous chain of CAs.
+        Will raise exceptions for deviations:
+            - multiple Root CAs or chains or lowest CAs
+            - internal gaps
+            - etc.
+
+        Args:
+            unsorted_cas: A list of Certificate objects
+
+        Returns:
+            A list of Certificate objects, sorted from the lowest Intermediate CA to the Highest (Intermediate or Root)
+
+        Raises:
+            Exception: if the input does not represent a perfect single CA chain/segment.
+        """
+
+        # Empty list
+        if not unsorted_cas or len(unsorted_cas) == 0:
+            return []
+
+        # Check that the provided CAs are actually CA certificates
+        for ca in unsorted_cas:
+            if not ca.is_ca:
+                raise Exception(f"CA chain contains a non-CA Certificate '{ca.subject.human_friendly}'")
+
+        # List of one, already sorted, obviously
+        if len(unsorted_cas) == 1:
+            return unsorted_cas
+
+        # Check for multiple Root CAs
+        root_cas = []
+        for ca in unsorted_cas:
+            if ca.subject.dump() == ca.issuer.dump():
+                root_cas.append(ca)
+
+        if len(root_cas) > 1:
+            raise Exception("CA chain contains more than one Root CA")
+
+        # Map subjects to certs (easy lookup)
+        subject_map = {ca.subject.dump(): ca for ca in unsorted_cas}
+
+        # Get the subject of all certs that are issuers of others
+        # The "start_ca" (lowest Intermediate CA) subject will NOT be in there
+        higher_cas_subjects = set()
+        for current_ca in unsorted_cas:
+            for other_ca in unsorted_cas:
+                if current_ca is not other_ca and current_ca.subject.dump() == other_ca.issuer.dump():
+                    higher_cas_subjects.add(current_ca.subject.dump())
+                    break
+
+        # Get all the possible start_cas (lowest Intermediate CA of a chain)
+        potential_start_cas = []
+        for ca in unsorted_cas:
+            if ca.subject.dump() not in higher_cas_subjects:
+                potential_start_cas.append(ca)
+
+        # Get the start_ca (we should have only one)
+        start_ca = None
+        if not potential_start_cas:
+            raise Exception("No lowest Intermediate CA found in hte CA chain")
+        elif len(potential_start_cas) > 1:
+            raise Exception("Multiple lowest Intermediate CAs found in hte CA chain")
+        else:
+            start_ca = potential_start_cas[0]
+
+        # Walk the chain from the lowest to the highest CA
+        sorted_cas = []
+        current_ca = start_ca
+
+        while current_ca:
+            sorted_cas.append(current_ca)
+
+            # Check if we have reached the Root CA
+            if current_ca.subject.dump() == current_ca.issuer.dump():
+                break
+
+            # Get the next CA in the chain
+            next_ca = subject_map.get(current_ca.issuer.dump())
+            if next_ca:
+                current_ca = next_ca
+            else:
+                # All provided CAs are already added (i.e. no Root CA provided)
+                if len(sorted_cas) == len(unsorted_cas):
+                    break
+                # We have found a gap in the CA chain
+                else:
+                    raise Exception(f"Gap in the CA chain: issuer of {current_ca.subject.human_friendly} not found")
+
+        # Check if all provided CAs have been "consumed".
+        # If not, probably because multiple chains were provided
+        if len(sorted_cas) != len(unsorted_cas):
+            raise Exception(f"Length mismatch: expected {len(unsorted_cas)} CAs but sorted {len(sorted_cas)}")
+
+        return sorted_cas
 
 
 class EnrollmentStatus:
