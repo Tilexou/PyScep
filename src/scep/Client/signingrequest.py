@@ -177,9 +177,9 @@ class SigningRequest:
         return SigningRequest(request=request), private_key
 
     @classmethod
-    def generate_csr_enh(cls, subject, key_usage, password=None, private_key=None, san_domains=None, san_ips=None):
+    def generate_csr_enh(cls, subject, key_usage, password=None, private_key=None, key_size=2048, san_domains=None, san_ips=None):
         if private_key is None:
-            private_key = cls.generate_pair()
+            private_key = cls.generate_pair(size=key_size)
 
         builder = ScepCSRBuilder(
             subject,
@@ -240,6 +240,22 @@ class SigningRequest:
     def generate_self_signed(cls, cn, key_usage, private_key=None):
         if private_key is None:
             private_key = cls.generate_pair()
+
+        builder = CertificateBuilder(
+            {
+                u'common_name': six.text_type(cn),
+            },
+            private_key.public_key.to_asn1_public_key()
+        )
+        builder.key_usage = key_usage #[u'digital_signature', u'key_encipherment']
+        builder.self_signed = True
+        certificate = builder.build(private_key.to_asn1_private_key())
+        return Certificate(certificate=certificate), private_key
+
+    @classmethod
+    def generate_self_signed_enh(cls, cn, key_usage, private_key=None, key_size=2048):
+        if private_key is None:
+            private_key = cls.generate_pair(size=key_size)
 
         builder = CertificateBuilder(
             {
