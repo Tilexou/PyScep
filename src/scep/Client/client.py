@@ -245,6 +245,7 @@ class Client:
             b64_string = b64_bytes.encode('ascii')
             res = requests.get(self.url, params={'operation': 'PKIOperation', 'message': b64_string}, data=data, headers=headers)
 
+        res.raise_for_status()
         if res.status_code != 200:
             raise ValueError('Got invalid status code for PKIOperation: {}'.format(res.status_code))
 
