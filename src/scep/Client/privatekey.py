@@ -41,6 +41,10 @@ class PrivateKey:
     def public_key(self):
         return PublicKey(public_key=self._oscrypto_private_key.public_key.asn1)
 
+    @property
+    def size(self):
+        return self._private_key.bit_size
+
     def to_der(self, password=None):
         return asymmetric.dump_private_key(self._private_key, passphrase=password, encoding='der')
 
