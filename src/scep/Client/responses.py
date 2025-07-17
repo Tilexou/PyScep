@@ -175,7 +175,6 @@ class CACertificates:
 
     def __chain(self):
         cas = self._filter(required_key_usage=set(), not_required_key_usage=set(), ca_only=True)
-
         return CACertificates.sort_cas(cas)
 
     def _filter(self, required_key_usage, not_required_key_usage, ca_only=False):
