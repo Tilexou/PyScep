@@ -87,6 +87,22 @@ class CACertificates:
         return self._certificates
 
     def verify(self):
+        """
+        Verifies the certificates received with the PKI operation GetCACert.
+        Checks that signer and recipient are actually issued by the isser (unless they are the issuer themselves).
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            Exception: if either the signer or recipient is not issued by the issuer (CA)
+
+        TODO
+            - Verify the chain itself (each CA issued by the next higher one)
+        """
         assert self.issuer is not None
         assert self.signer is not None
         assert self.recipient is not None
@@ -197,7 +213,7 @@ class CACertificates:
     def sort_cas(unsorted_cas):
         """
         Sorts a list of CA certificates from the lowest Intermediate CA to the Highest one (Intermediate or Root).
-        Expects a "perect" contiguous chain of CAs.
+        Expects a "perfect" contiguous chain of CAs.
         Will raise exceptions for deviations:
             - multiple Root CAs or chains or lowest CAs
             - internal gaps
